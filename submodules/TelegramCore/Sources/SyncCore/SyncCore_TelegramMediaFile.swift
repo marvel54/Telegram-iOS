@@ -329,6 +329,15 @@ public enum TelegramMediaFileAttribute: PostboxCoding, Equatable {
                 }
         }
     }
+
+    public var stickerDisplayText: String? {
+        switch self {
+        case .Sticker(let displayText, _, _):
+            return displayText
+        default:
+            return nil
+        }
+    }
 }
 
 public enum TelegramMediaFileReference: PostboxCoding, Equatable {

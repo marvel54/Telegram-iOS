@@ -66,7 +66,9 @@ final class LegacyCallControllerNode: ASDisplayNode, CallControllerNodeProtocol 
     var dismissedInteractively: (() -> Void)?
     var present: ((ViewController) -> Void)?
     var dismissAllTooltips: (() -> Void)?
-    
+    var forceClose: (() -> Void)?
+    var applyRating: ((Int, CallId?) -> Void)?
+
     init(sharedContext: SharedAccountContext, account: Account, presentationData: PresentationData, statusBar: StatusBar, debugInfo: Signal<(String, String), NoError>, shouldStayHiddenUntilConnection: Bool = false, easyDebugAccess: Bool, call: PresentationCall) {
         self.sharedContext = sharedContext
         self.account = account
@@ -379,7 +381,7 @@ final class LegacyCallControllerNode: ASDisplayNode, CallControllerNodeProtocol 
         
         if let keyPreviewNode = self.keyPreviewNode {
             transition.updateFrame(node: keyPreviewNode, frame: CGRect(origin: CGPoint(), size: layout.size))
-            keyPreviewNode.updateLayout(size: layout.size, transition: .immediate)
+            keyPreviewNode.updateLayout(size: layout.size, leftOsset: 44.5, transition: .immediate)
         }
         
         transition.updateFrame(node: self.imageNode, frame: CGRect(origin: CGPoint(), size: layout.size))
@@ -442,32 +444,34 @@ final class LegacyCallControllerNode: ASDisplayNode, CallControllerNodeProtocol 
     }
     
     @objc func keyPressed() {
-        if self.keyPreviewNode == nil, let keyText = self.keyTextData?.1, let peer = self.peer {
-            let keyPreviewNode = CallControllerKeyPreviewNode(keyText: keyText, infoText: self.presentationData.strings.Call_EmojiDescription(EnginePeer(peer).compactDisplayTitle).string.replacingOccurrences(of: "%%", with: "%"), dismiss: { [weak self] in
-                if let _ = self?.keyPreviewNode {
-                    self?.backPressed()
-                }
-            })
-            
-            self.containerNode.insertSubnode(keyPreviewNode, belowSubnode: self.statusNode)
-            self.keyPreviewNode = keyPreviewNode
-            
-            if let (validLayout, _) = self.validLayout {
-                keyPreviewNode.updateLayout(size: validLayout.size, transition: .immediate)
-                
-                self.keyButtonNode.isHidden = true
-                keyPreviewNode.animateIn(from: self.keyButtonNode.frame, fromNode: self.keyButtonNode)
-            }
-        }
+//        if self.keyPreviewNode == nil, let keyText = self.keyTextData?.1, let peer = self.peer {
+//            let strings = self.presentationData.strings
+//            let keyPreviewNode = CallControllerKeyPreviewNode(keyText: keyText, infoTitleText: "This call is end-to end encrypted", infoText: strings.Call_EmojiDescription(EnginePeer(peer).compactDisplayTitle).string.replacingOccurrences(of: "%%", with: "%"), okButtonText: strings.Common_OK, account: self.account, engine: self.call.context.engine, dismiss: { [weak self] in
+//                if let _ = self?.keyPreviewNode {
+//                    self?.backPressed()
+//                }
+//            })
+//            
+//            self.containerNode.insertSubnode(keyPreviewNode, belowSubnode: self.statusNode)
+//            self.keyPreviewNode = keyPreviewNode
+//            
+//            if let (validLayout, _) = self.validLayout {
+//                keyPreviewNode.updateLayout(size: validLayout.size, transition: .immediate)
+//                
+//                self.keyButtonNode.isHidden = true
+//                keyPreviewNode.animateIn(from: self.keyButtonNode.frame, fromNode: self.keyButtonNode)
+//            }
+//        }
     }
     
     @objc func backPressed() {
         if let keyPreviewNode = self.keyPreviewNode {
             self.keyPreviewNode = nil
-            keyPreviewNode.animateOut(to: self.keyButtonNode.frame, toNode: self.keyButtonNode, completion: { [weak self, weak keyPreviewNode] in
-                self?.keyButtonNode.isHidden = false
-                keyPreviewNode?.removeFromSupernode()
-            })
+            print(keyPreviewNode)
+//            keyPreviewNode.animateOut(to: self.keyButtonNode.frame, toNode: self.keyButtonNode, completion: { [weak self, weak keyPreviewNode] in
+//                self?.keyButtonNode.isHidden = false
+//                keyPreviewNode?.removeFromSupernode()
+//            })
         } else {
             self.back?()
         }

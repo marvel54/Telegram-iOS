@@ -218,11 +218,15 @@ public struct Font {
 }
 
 public extension NSAttributedString {
-    convenience init(string: String, font: UIFont? = nil, textColor: UIColor = UIColor.black, paragraphAlignment: NSTextAlignment? = nil) {
+    convenience init(string: String, font: UIFont? = nil, textColor: UIColor = UIColor.black, paragraphAlignment: NSTextAlignment? = nil, kern: CGFloat? = nil) {
         var attributes: [NSAttributedString.Key: AnyObject] = [:]
         if let font = font {
             attributes[NSAttributedString.Key.font] = font
         }
+        if let kern = kern {
+            attributes[NSAttributedString.Key.kern] = kern as AnyObject
+        }
+       
         attributes[NSAttributedString.Key.foregroundColor] = textColor
         if let paragraphAlignment = paragraphAlignment {
             let paragraphStyle = NSMutableParagraphStyle()

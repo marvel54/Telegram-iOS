@@ -153,6 +153,7 @@ public protocol AnimatedStickerNode: ASDisplayNode {
     var playToCompletionOnStop: Bool { get set }
     var started: () -> Void { get set }
     
+    var loadingCompleted: (() -> Void)? { get set }
     var completed: (Bool) -> Void { get set }
     var frameUpdated: (Int, Int) -> Void { get set }
     var currentFrameIndex: Int { get }
@@ -197,7 +198,9 @@ public final class DefaultAnimatedStickerNodeImpl: ASDisplayNode, AnimatedSticke
     public var started: () -> Void = {}
     private var reportedStarted = false
     
+    public var animationCompleted: Bool = false
     public var completed: (Bool) -> Void = { _ in }
+    public var loadingCompleted: (() -> Void)?
     public var frameUpdated: (Int, Int) -> Void = { _, _ in }
     public private(set) var currentFrameIndex: Int = 0
     public private(set) var currentFrameCount: Int = 0
@@ -365,6 +368,7 @@ public final class DefaultAnimatedStickerNodeImpl: ASDisplayNode, AnimatedSticke
                 } else if strongSelf.canDisplayFirstFrame {
                     strongSelf.play(firstFrame: true)
                 }
+                strongSelf.loadingCompleted?()
             }
             self.disposable.set((source.directDataPath(attemptSynchronously: false)
             |> filter { $0 != nil }
@@ -398,6 +402,7 @@ public final class DefaultAnimatedStickerNodeImpl: ASDisplayNode, AnimatedSticke
                         }
                     }
                 }
+                strongSelf.loadingCompleted?()
             }))
         }
     }
@@ -548,7 +553,7 @@ public final class DefaultAnimatedStickerNodeImpl: ASDisplayNode, AnimatedSticke
                                     strongSelf.isPlaying = false
                                     stopped = true
                                 }
-                                
+                                strongSelf.animationCompleted = true
                                 strongSelf.completed(stopped)
                             }
 
@@ -658,7 +663,7 @@ public final class DefaultAnimatedStickerNodeImpl: ASDisplayNode, AnimatedSticke
                                     strongSelf.isPlaying = false
                                     stopped = true
                                 }
-                                
+                                strongSelf.animationCompleted = true
                                 strongSelf.completed(stopped)
                             }
                                                         

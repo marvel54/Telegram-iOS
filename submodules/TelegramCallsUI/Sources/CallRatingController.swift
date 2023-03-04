@@ -87,6 +87,7 @@ private final class CallRatingAlertContentNode: AlertContentNode {
         }
         
         self.updateTheme(theme)
+
     }
     
     deinit {

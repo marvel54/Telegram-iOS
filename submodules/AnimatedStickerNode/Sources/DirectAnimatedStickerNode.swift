@@ -20,6 +20,7 @@ public final class DirectAnimatedStickerNode: ASDisplayNode, AnimatedStickerNode
     private var didStart: Bool = false
     public var started: () -> Void = {}
     
+    public var loadingCompleted: (() -> Void)?
     public var completed: (Bool) -> Void = { _ in }
     private var didComplete: Bool = false
     

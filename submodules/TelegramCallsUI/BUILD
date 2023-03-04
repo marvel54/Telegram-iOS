@@ -11,7 +11,7 @@ load("//build-system/bazel-utils:plist_fragment.bzl",
 filegroup(
     name = "TelegramCallsUIMetalResources",
     srcs = glob([
-        "Resources/**/*.metal",
+        "Resources/**/*.*",
     ]),
     visibility = ["//visibility:public"],
 )

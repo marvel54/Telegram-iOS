@@ -567,4 +567,55 @@ public final class GradientBackgroundNode: ASDisplayNode {
             completion()
         }
     }
+
+    var animationLoopActive = false
+}
+
+extension GradientBackgroundNode {
+    public enum CallStateGradient {
+        case ringing
+        case connected
+        case weakSignal
+
+        var colors: [UIColor] {
+            let colorsStr: [String]
+            switch self {
+            case .ringing:
+                colorsStr = ["#5295D6", "#616AD5", "#AC65D4", "#7261DA"]
+            case .connected:
+                colorsStr = ["#53A6DE", "#398D6F", "#BAC05D", "#3C9C8F"]
+            case .weakSignal:
+                colorsStr = ["#B84498", "#F4992E", "#C94986", "#FF7E46"]
+            }
+            return colorsStr.compactMap { UIColor(hexString: $0) }
+        }
+    }
+
+    public static func gradient(with state: GradientBackgroundNode.CallStateGradient) -> GradientBackgroundNode {
+        return GradientBackgroundNode(colors: state.colors, useSharedAnimationPhase: true)
+    }
+
+    public func startAnimationLoop() {
+        guard !animationLoopActive else { return }
+        animationLoopActive = true
+        if (self.contentView.layer.animationKeys()?.count ?? 0) == 0 {
+            animationLoop(transition: .animated(duration: 5, curve: .linear))
+        }
+    }
+
+    public func stopAnimationLoop(immediately: Bool = false) {
+        DispatchQueue.main.async {
+            self.animationLoopActive = false
+        }
+        if immediately {
+            self.contentView.layer.removeAnimation(forKey: "contents")
+        }
+    }
+
+    private func animationLoop(transition: ContainedViewLayoutTransition) {
+        guard animationLoopActive else { return }
+        animateEvent(transition: transition, extendAnimation: true, backwards: true) {
+            self.animationLoop(transition: transition)
+        }
+    }
 }

@@ -23,21 +23,33 @@ protocol CallControllerNodeProtocol: AnyObject {
     var acceptCall: (() -> Void)? { get set }
     var endCall: (() -> Void)? { get set }
     var back: (() -> Void)? { get set }
+    var forceClose: (() -> Void)? { get set }
     var presentCallRating: ((CallId, Bool) -> Void)? { get set }
     var present: ((ViewController) -> Void)? { get set }
     var callEnded: ((Bool) -> Void)? { get set }
     var dismissedInteractively: (() -> Void)? { get set }
     var dismissAllTooltips: (() -> Void)? { get set }
+    var applyRating: ((Int, CallId?) -> Void)? { get set }
     
     func updateAudioOutputs(availableOutputs: [AudioSessionOutput], currentOutput: AudioSessionOutput?)
+    func updateAudioLevel(_ level: Float)
     func updateCallState(_ callState: PresentationCallState)
     func updatePeer(accountPeer: Peer, peer: Peer, hasOther: Bool)
     
     func animateIn()
     func animateOut(completion: @escaping () -> Void)
     func expandFromPipIfPossible()
-    
+
+    func stopHeavyAnimations()
+    func startHeavyAnimations()
+
     func containerLayoutUpdated(_ layout: ContainerViewLayout, navigationBarHeight: CGFloat, transition: ContainedViewLayoutTransition)
+}
+
+extension CallControllerNodeProtocol {
+    func updateAudioLevel(_ level: Float) { }
+    func stopHeavyAnimations() { }
+    func startHeavyAnimations() { }
 }
 
 public final class CallController: ViewController {
@@ -57,6 +69,7 @@ public final class CallController: ViewController {
     
     private var presentationData: PresentationData
     private var didPlayPresentationAnimation = false
+    private var shouldPresentRating = false
     
     private var peer: Peer?
     
@@ -69,16 +82,19 @@ public final class CallController: ViewController {
     private var presentedCallRating = false
     
     private var audioOutputStateDisposable: Disposable?
+    private var audioLevelDisposable: Disposable?
     private var audioOutputState: ([AudioSessionOutput], AudioSessionOutput?)?
+    private var audioLevel: Float?
     
     private let idleTimerExtensionDisposable = MetaDisposable()
-    
+    private var dismissCompletion: (() -> Void)? = nil
+    private var feedbackController: ViewController?
+
     public init(sharedContext: SharedAccountContext, account: Account, call: PresentationCall, easyDebugAccess: Bool) {
         self.sharedContext = sharedContext
         self.account = account
         self.call = call
         self.easyDebugAccess = easyDebugAccess
-        
         self.presentationData = sharedContext.currentPresentationData.with { $0 }
         
         super.init(navigationBarPresentationData: nil)
@@ -114,6 +130,16 @@ public final class CallController: ViewController {
                 }
             }
         })
+        
+        self.audioLevelDisposable = (call.audioLevel
+        |> deliverOnMainQueue).start(next: { [weak self] level in
+            if let strongSelf = self {
+                strongSelf.audioLevel = level
+                if strongSelf.isNodeLoaded {
+                    strongSelf.controllerNode.updateAudioLevel(level)
+                }
+            }
+        })
     }
     
     required public init(coder aDecoder: NSCoder) {
@@ -126,6 +152,7 @@ public final class CallController: ViewController {
         self.callMutedDisposable?.dispose()
         self.audioOutputStateDisposable?.dispose()
         self.idleTimerExtensionDisposable.dispose()
+        self.audioLevelDisposable?.dispose()
     }
     
     private func callStateUpdated(_ callState: PresentationCallState) {
@@ -135,11 +162,7 @@ public final class CallController: ViewController {
     }
     
     override public func loadDisplayNode() {
-        if self.call.isVideoPossible {
-            self.displayNode = CallControllerNode(sharedContext: self.sharedContext, account: self.account, presentationData: self.presentationData, statusBar: self.statusBar, debugInfo: self.call.debugInfo(), shouldStayHiddenUntilConnection: !self.call.isOutgoing && self.call.isIntegratedWithCallKit, easyDebugAccess: self.easyDebugAccess, call: self.call)
-        } else {
-            self.displayNode = LegacyCallControllerNode(sharedContext: self.sharedContext, account: self.account, presentationData: self.presentationData, statusBar: self.statusBar, debugInfo: self.call.debugInfo(), shouldStayHiddenUntilConnection: !self.call.isOutgoing && self.call.isIntegratedWithCallKit, easyDebugAccess: self.easyDebugAccess, call: self.call)
-        }
+        self.displayNode = CallControllerNode(sharedContext: self.sharedContext, account: self.account, presentationData: self.presentationData, statusBar: self.statusBar, debugInfo: self.call.debugInfo(), shouldStayHiddenUntilConnection: !self.call.isOutgoing && self.call.isIntegratedWithCallKit, easyDebugAccess: self.easyDebugAccess, call: self.call)
         self.displayNodeDidLoad()
         
         self.controllerNode.toggleMute = { [weak self] in
@@ -228,9 +251,21 @@ public final class CallController: ViewController {
         }
         
         self.controllerNode.back = { [weak self] in
-            let _ = self?.dismiss()
+            let _ = self?.dismissPrivate(delay: 0)
         }
-        
+
+        self.controllerNode.applyRating = { [weak self] rating, callId in
+            guard let `self` = self else { return }
+            guard let callId = callId else { return }
+            
+            if rating < 4 {
+                let feedbackController = callFeedbackController(sharedContext: self.sharedContext, account: self.account, callId: callId, rating: rating, userInitiated: false, isVideo: self.call.isVideo)
+                self.feedbackController = feedbackController
+            } else {
+                let _ = rateCallAndSendLogs(engine: TelegramEngine(account: self.account), callId: callId, starsCount: rating, comment: "", userInitiated: false, includeLogs: false).start()
+            }
+        }
+
         self.controllerNode.presentCallRating = { [weak self] callId, isVideo in
             if let strongSelf = self, !strongSelf.presentedCallRating {
                 strongSelf.presentedCallRating = true
@@ -270,6 +305,7 @@ public final class CallController: ViewController {
         }
         
         self.controllerNode.callEnded = { [weak self] didPresentRating in
+            self?.shouldPresentRating = didPresentRating
             if let strongSelf = self, !didPresentRating {
                 let _ = (combineLatest(strongSelf.sharedContext.accountManager.sharedData(keys: [ApplicationSpecificSharedDataKeys.callListSettings]), ApplicationSpecificNotice.getCallsTabTip(accountManager: strongSelf.sharedContext.accountManager))
                 |> map { sharedData, callsTabTip -> Int32 in
@@ -298,7 +334,20 @@ public final class CallController: ViewController {
             }
         }
         
+        self.controllerNode.forceClose = { [weak self] in
+            guard let `self` = self else { return }
+            self.presentFeedbackControllerIfNeeded()
+            self.controllerNode.animateOut(completion: { [weak self] in
+                self?.didPlayPresentationAnimation = false
+                self?.presentingViewController?.dismiss(animated: false, completion: nil)
+                
+                self?.dismissCompletion?()
+                self?.dismissCompletion = nil
+            })
+        }
+
         self.controllerNode.dismissedInteractively = { [weak self] in
+            self?.controllerNode.stopHeavyAnimations()
             self?.didPlayPresentationAnimation = false
             self?.presentingViewController?.dismiss(animated: false, completion: nil)
         }
@@ -346,14 +395,30 @@ public final class CallController: ViewController {
     }
     
     override public func dismiss(completion: (() -> Void)? = nil) {
-        self.controllerNode.animateOut(completion: { [weak self] in
-            self?.didPlayPresentationAnimation = false
-            self?.presentingViewController?.dismiss(animated: false, completion: nil)
-            
-            completion?()
+        self.dismissPrivate(completion: completion, delay: shouldPresentRating ? 4 : 0)
+    }
+
+    private func dismissPrivate(completion: (() -> Void)? = nil, delay: TimeInterval = 4) {
+        self.dismissCompletion = completion
+        DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: { [weak self] in
+            guard let `self` = self else { return }
+            self.presentFeedbackControllerIfNeeded()
+            self.controllerNode.animateOut(completion: { [weak self] in
+                self?.didPlayPresentationAnimation = false
+                self?.presentingViewController?.dismiss(animated: false, completion: nil)
+                
+                self?.dismissCompletion?()
+                self?.dismissCompletion = nil
+            })
         })
     }
-    
+
+    private func presentFeedbackControllerIfNeeded() {
+        if let feedbackController = feedbackController {
+            self.present(feedbackController, in: .window(.root))
+        }
+    }
+
     @objc private func backPressed() {
         self.dismiss()
     }
