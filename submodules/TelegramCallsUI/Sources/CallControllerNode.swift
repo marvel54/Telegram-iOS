@@ -1006,7 +1006,7 @@ final class CallControllerNode: ViewControllerTracingNode, CallControllerNodePro
     }
     
     deinit {
-        setProximitySensorEnabled(false)
+        setProximitySensorEnabled(false, deinitialization: true)
         if let orientationDidChangeObserver = self.orientationDidChangeObserver {
             NotificationCenter.default.removeObserver(orientationDidChangeObserver)
         }
@@ -2715,9 +2715,9 @@ final class CallControllerNode: ViewControllerTracingNode, CallControllerNodePro
         }
     }
 
-    private func setProximitySensorEnabled(_ enabled: Bool) {
+    private func setProximitySensorEnabled(_ enabled: Bool, deinitialization: Bool = false) {
         let device = UIDevice.current
-        device.isProximityMonitoringEnabled = enabled
+        device.isProximityMonitoringEnabled = deinitialization && device.proximityState ? true : enabled
         if device.isProximityMonitoringEnabled {
             NotificationCenter.default.addObserver(self, selector: #selector(proximityChanged), name: UIDevice.proximityStateDidChangeNotification, object: device)
         }

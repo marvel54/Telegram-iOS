@@ -569,6 +569,7 @@ public final class GradientBackgroundNode: ASDisplayNode {
     }
 
     var animationLoopActive = false
+    private var lastFireDate = Date()
 }
 
 extension GradientBackgroundNode {
@@ -614,7 +615,13 @@ extension GradientBackgroundNode {
 
     private func animationLoop(transition: ContainedViewLayoutTransition) {
         guard animationLoopActive else { return }
-        animateEvent(transition: transition, extendAnimation: true, backwards: true) {
+        lastFireDate = Date()
+        animateEvent(transition: transition, extendAnimation: true, backwards: true) { [weak self] in
+            guard let `self` = self else { return }
+            guard Date().timeIntervalSince(self.lastFireDate) >= transition.duration else {
+                self.animationLoopActive = false
+                return
+            }
             self.animationLoop(transition: transition)
         }
     }

@@ -96,6 +96,15 @@ public enum ContainedViewLayoutTransition {
             return true
         }
     }
+
+    public var duration: TimeInterval {
+        switch self {
+        case .immediate:
+            return 0
+        case let .animated(duration, _):
+            return duration
+        }
+    }
 }
 
 public extension CGRect {
